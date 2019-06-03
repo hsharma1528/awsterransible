@@ -7,48 +7,6 @@ provider "aws" {
 #-----IAM-------
 #S3_access
 
-resource "aws_iam_instance_profile" "s3_access_profile" {
-  name = "s3_access"
-  role = "${aws_iam_role.s3_access_role.name}"
-}
-
-resource "aws_iam_role_policy" "s3_access_policy" {
-  name = "s3_access_policy"
-  role = "${aws_iam_role.s3_access_role.id}"
-
-  policy = <<EOF
-{
- "Version": "2012-10-17",
- "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": "s3:*",
-      "Resource": "*"
-     }
-   ]
-}
-EOF
-}
-
-resource "aws_iam_role" "s3_access_role" {
-  name = "s3_access_role"
-
-  assume_role_policy = <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-   {
-    "Action": "sts:AssumeRole",
-    "Principal": {
-        "Service": "ec2.amazonaws.com"
-     },
-     "Effect": "Allow",
-     "Sid": ""
-    }
- ]
-}
-EOF
-}
 
 #-----VPC-------
 resource "aws_vpc" "wp_vpc" {
@@ -139,53 +97,9 @@ resource "aws_subnet" "wp_private2_subnet" {
   }
 }
 
-resource "aws_subnet" "wp_rds1_subnet" {
-  vpc_id                  = "${aws_vpc.wp_vpc.id}"
-  cidr_block              = "${var.cidrs["rds1"]}"
-  map_public_ip_on_launch = false
-  availability_zone       = "${data.aws_availability_zones.available.names[0]}"
-
-  tags {
-    Name = "wp_rds1_subnet"
-  }
-}
-
-resource "aws_subnet" "wp_rds2_subnet" {
-  vpc_id                  = "${aws_vpc.wp_vpc.id}"
-  cidr_block              = "${var.cidrs["rds2"]}"
-  map_public_ip_on_launch = false
-  availability_zone       = "${data.aws_availability_zones.available.names[1]}"
-
-  tags {
-    Name = "wp_rds2_subnet"
-  }
-}
-
-resource "aws_subnet" "wp_rds3_subnet" {
-  vpc_id                  = "${aws_vpc.wp_vpc.id}"
-  cidr_block              = "${var.cidrs["rds3"]}"
-  map_public_ip_on_launch = false
-  availability_zone       = "${data.aws_availability_zones.available.names[2]}"
-
-  tags {
-    Name = "wp_rds3_subnet"
-  }
-}
 
 # rds Subnet Groups
 
-resource "aws_db_subnet_group" "wp_rds_subnetgroups" {
-  name = "wp_rds_subnetgroup"
-
-  subnet_ids = ["${aws_subnet.wp_rds1_subnet.id}",
-    "${aws_subnet.wp_rds2_subnet.id}",
-    "${aws_subnet.wp_rds3_subnet.id}",
-  ]
-
-  tags {
-    Name = "wp_rds_subnetgroup"
-  }
-}
 
 #subnet associations
 
@@ -288,84 +202,7 @@ resource "aws_security_group" "wp_private_sg" {
 
 # RDS SG
 
-resource "aws_security_group" "wp_rds_sg" {
-  name        = "wp_rds_sg"
-  description = "RDS Access"
-  vpc_id      = "${aws_vpc.wp_vpc.id}"
-
-  #SQL access
-
-  ingress {
-    from_port = 3306
-    to_port   = 3306
-    protocol  = "tcp"
-
-    security_groups = ["${aws_security_group.wp_dev_sg.id}",
-      "${aws_security_group.wp_public_sg.id}",
-      "${aws_security_group.wp_private_sg.id}",
-    ]
-  }
-}
-
-# VPC Endpoint for S3
-
-resource "aws_vpc_endpoint" "wp_private_s3_ep" {
-  vpc_id       = "${aws_vpc.wp_vpc.id}"
-  service_name = "com.amazonaws.${var.aws_region}.s3"
-
-  route_table_ids = ["${aws_vpc.wp_vpc.main_route_table_id}",
-    "${aws_route_table.wp_public_rt.id}",
-  ]
-
-  policy = <<POLICY
-
-{
-   "Statement": [
-       {
-           "Action": "*",
-           "Effect": "Allow",
-           "Resource": "*",
-           "Principal": "*"
-       }
-   ]
-}
-POLICY
-}
-
-#------------------S3 code bucket---------------
-
-resource "random_id" "wp_code_bucket" {
-  byte_length = 2
-}
-
-resource "aws_s3_bucket" "wp_code_bucket" {
-  bucket        = "${var.domain_name}-${random_id.wp_code_bucket.dec}"
-  acl           = "private"
-  force_destroy = true
-
-  tags {
-    Name = "code bucket"
-  }
-}
-
-#-----RDS------
-
-resource "aws_db_instance" "wp_db" {
-  allocated_storage      = 10
-  engine                 = "mysql"
-  engine_version         = "5.7.22"
-  instance_class         = "${var.db_instance_class}"
-  name                   = "${var.dbname}"
-  username               = "${var.dbuser}"
-  password               = "${var.dbpassword}"
-  db_subnet_group_name   = "${aws_db_subnet_group.wp_rds_subnetgroups.name}"
-  vpc_security_group_ids = ["${aws_security_group.wp_rds_sg.id}"]
-  skip_final_snapshot    = true
-}
-
-#-------------------Dev Server---------------
-
-#keypair
+keypair
 
 resource "aws_key_pair" "wp_auth" {
   key_name   = "${var.key_name}"
@@ -390,17 +227,15 @@ resource "aws_instance" "wp_dev" {
   provisioner "local-exec" {
     command = <<EOD
 cat <<EOF > aws_hosts
-[dev]
+[jenkins]
 ${aws_instance.wp_dev.public_ip}
-[dev:vars]
-s3code=${aws_s3_bucket.wp_code_bucket.bucket}
-domain=${var.domain_name}
+
 EOF
 EOD
   }
 
   provisioner "local-exec" {
-    command = "aws ec2 wait instance-status-ok --instance-ids ${aws_instance.wp_dev.id} --profile himandevops && ansible-paybook -i aws_hosts wordpress.yml"
+    command = "aws ec2 wait instance-status-ok --instance-ids ${aws_instance.wp_dev.id} --profile himandevops && ansible-paybook -i aws_hosts jenkins.yml"
   }
 }
 
@@ -440,76 +275,11 @@ resource "aws_elb" "wp_elb" {
   }
 }
 
-#------------ Golden AMI---------------------
 
-#random ami id
-resource "random_id" "golden_ami" {
-  byte_length = 3
+resource "aws_elb_attachment" "jkec2" {
+  elb      = "${aws_elb.wp_elb.id}"
+  instance = "${aws_instance.wp_dev.id}"
 }
-
-# AMI
-
-resource "aws_ami_from_instance" "wp_golden" {
-  name               = "wp_ami-${random_id.golden_ami.b64}"
-  source_instance_id = "${aws_instance.wp_dev.id}"
-
-  provisioner "local-exec" {
-    command = <<EOT
-cat <<EOF > userdata
-#!/bin/bash
-/usr/bin/aws s3 sync s3://${aws_s3_bucket.wp_code_bucket.bucket} /var/www/html/
-/bin/touch /var/spool/cron/root
-sudo /bin/echo '*/5 * * * * aws s3 sync s3://${aws_s3_bucket.wp_code_bucket.bucket} /var/www/html' >> /var/spool/cron/root
-EOF
-EOT
-  }
-}
-
-#-----------Launch Configuration----------------
-
-resource "aws_launch_configuration" "wp_lc" {
-  name_prefix          = "wp-lc-"
-  image_id             = "${aws_ami_from_instance.wp_golden.id}"
-  instance_type        = "${var.lc_instance_type}"
-  security_groups      = ["${aws_security_group.wp_private_sg.id}"]
-  iam_instance_profile = "${aws_iam_instance_profile.s3_access_profile.id}"
-  key_name             = "${aws_key_pair.wp_auth.id}"
-  user_data            = "${file("userdata")}"
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-#-------ASG-----
-
-resource "aws_autoscaling_group" "wp_asg" {
-  name                      = "asg-${aws_launch_configuration.wp_lc.id}"
-  max_size                  = "${var.asg_max}"
-  min_size                  = "${var.asg_min}"
-  health_check_grace_period = "${var.asg_grace}"
-  health_check_type         = "${var.asg_hct}"
-  desired_capacity          = "${var.asg_cap}"
-  force_delete              = true
-  load_balancers            = ["${aws_elb.wp_elb.id}"]
-
-  vpc_zone_identifier = ["${aws_subnet.wp_private1_subnet.id}",
-    "${aws_subnet.wp_private2_subnet.id}",
-  ]
-
-  launch_configuration = "${aws_launch_configuration.wp_lc.name}"
-
-  tags {
-    key                 = "Name"
-    value               = "wp-asg-instance"
-    propagate_at_launch = true
-  }
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
 #-----Route 53 ---------------
 
 
@@ -536,30 +306,5 @@ resource "aws_route53_record" "www" {
   }
 }
 
-#Dev
 
-resource "aws_route53_record" "dev" {
-  zone_id = "${aws_route53_zone.primary.zone_id}"
-  name = "dev.${var.domain_name}.website"
-  type = "A"
-  ttl  = "300"
-  records = ["${aws_instance.wp_dev.public_ip}"]
-}
- 
-#PrivateZOne
-
-resource  "aws_route53_zone" "private" {
-  name = "${var.domain_name}.website"
-  vpc_id = "${aws_vpc.wp_vpc.id}"
-}
-#DB
-
-resource "aws_route53_record" "db" {
-   zone_id = "${aws_route53_zone.private.zone_id}"
-   name = "db.${var.domain_name}.website"
-   type = "CNAME"
-   ttl = "300"
-   records = ["${aws_db_instance.wp_db.address}"]
-
-}
 
