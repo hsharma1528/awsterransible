@@ -1,5 +1,3 @@
-[dev]
-34.203.219.80
-[dev:vars]
-s3code=himandevops-59600
-domain=himandevops
+[jenkins]
+3.81.109.148  ansible_ssh_user=ec2-user
+

@@ -1,5 +1,5 @@
 provider "aws" {
-  version = "1.13.0"
+  #version = "1.13.0"
   region  = "${var.aws_region}"
   profile = "${var.aws_profile}"
 }
@@ -141,7 +141,7 @@ resource "aws_security_group" "wp_dev_sg" {
   #http
   ingress {
     from_port   = 80
-    to_port     = 80
+    to_port     = 8080
     protocol    = "tcp"
     cidr_blocks = ["${var.localip}"]
   }
@@ -190,7 +190,7 @@ resource "aws_security_group" "wp_private_sg" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["${var.vpc_cidr}"]
+    cidr_blocks = ["${aws_security_group.wp_public_sg.id}"]
   }
   egress {
     from_port   = 0
@@ -202,7 +202,7 @@ resource "aws_security_group" "wp_private_sg" {
 
 # RDS SG
 
-keypair
+#keypair
 
 resource "aws_key_pair" "wp_auth" {
   key_name   = "${var.key_name}"
@@ -220,22 +220,22 @@ resource "aws_instance" "wp_dev" {
   }
 
   key_name               = "${aws_key_pair.wp_auth.id}"
-  vpc_security_group_ids = ["${aws_security_group.wp_dev_sg.id}"]
-  iam_instance_profile   = "${aws_iam_instance_profile.s3_access_profile.id}"
+  vpc_security_group_ids = ["${aws_security_group.wp_private_sg.id}"]
+  #iam_instance_profile   = "${aws_iam_instance_profile.s3_access_profile.id}"
   subnet_id              = "${aws_subnet.wp_public1_subnet.id}"
 
   provisioner "local-exec" {
     command = <<EOD
 cat <<EOF > aws_hosts
 [jenkins]
-${aws_instance.wp_dev.public_ip}
+${aws_instance.wp_dev.public_ip}  ansible_ssh_user=ec2-user
 
 EOF
 EOD
   }
 
   provisioner "local-exec" {
-    command = "aws ec2 wait instance-status-ok --instance-ids ${aws_instance.wp_dev.id} --profile himandevops && ansible-paybook -i aws_hosts jenkins.yml"
+    command = "aws ec2 wait instance-status-ok --instance-ids ${aws_instance.wp_dev.id} --profile himandevops && ansible-playbook -i aws_hosts jenkins.yml"
   }
 }
 
@@ -251,9 +251,9 @@ resource "aws_elb" "wp_elb" {
   security_groups = ["${aws_security_group.wp_public_sg.id}"]
 
   listener {
-    instance_port     = 80
+    instance_port     = 8080
     instance_protocol = "http"
-    lb_port           = 80
+    lb_port           = 8080
     lb_protocol       = "http"
   }
 
@@ -261,7 +261,7 @@ resource "aws_elb" "wp_elb" {
     healthy_threshold   = "${var.elb_healthy_threshold}"
     unhealthy_threshold = "${var.elb_unhealthy_threshold}"
     timeout             = "${var.elb_timeout}"
-    target              = "TCP:80"
+    target              = "TCP:8080"
     interval            = "${var.elb_interval}"
   }
 

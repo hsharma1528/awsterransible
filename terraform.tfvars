@@ -10,7 +10,7 @@ cidrs       = {
    rds2     = "10.0.6.0/24"
    rds3     = "10.0.7.0/24"
 }
- localip = "18.138.241.194/32"
+ localip = "3.84.195.93/32"
 
  domain_name = "himandevops"
  db_instance_class = "db.t2.micro"
@@ -18,8 +18,8 @@ cidrs       = {
  dbpassword = "ironmanpass"
  dbname = "ironmandb"
  dev_instance_type = "t2.micro"
- dev_ami = "ami-b73b63a0"
- public_key_path = "/root/.ssh/ironman.pub"
+ dev_ami = "ami-0c6b1d09930fac512"
+ public_key_path = "/root/.ssh/ironman1.pub"
  key_name = "ironman"
  elb_healthy_threshold = "2"
  elb_unhealthy_threshold = "2"
