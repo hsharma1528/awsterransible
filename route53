@@ -1,0 +1,14 @@
+aws route53 create-reusable-delegation-set --caller-reference 1528 --profile himandevops 
+{
+    "Location": "https://route53.amazonaws.com/2013-04-01/delegationset/N12F61JF48GZP2", 
+    "DelegationSet": {
+        "NameServers": [
+            "ns-1611.awsdns-09.co.uk", 
+            "ns-283.awsdns-35.com", 
+            "ns-1055.awsdns-03.org", 
+            "ns-828.awsdns-39.net"
+        ], 
+        "CallerReference": "1528", 
+        "Id": "/delegationset/N12F61JF48GZP2"
+    }
+}
